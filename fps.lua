@@ -24,6 +24,11 @@ local Settings = {
     SpeedHack_Enabled = false,
     SpeedHack_Speed   = 50,
     InfJump_Enabled   = false,
+    
+    RageHack_Enabled  = false,
+    RageHack_Distance = 1,
+    RageHack_Height   = 4,
+    RageHack_ActiveTarget = nil
 }
 
 
@@ -62,6 +67,11 @@ local LocalTab = Window:CreateTab("Local Player", "user")
 LocalTab:CreateToggle({ Name = "Hack Speed", CurrentValue = Settings.SpeedHack_Enabled, Flag = "SpeedHack", Callback = function(v) Settings.SpeedHack_Enabled = v end })
 LocalTab:CreateSlider({ Name = "Tốc độ chạy", Range = {16, 250}, Increment = 1, Suffix = "Speed", CurrentValue = Settings.SpeedHack_Speed, Flag = "SpeedSlider", Callback = function(v) Settings.SpeedHack_Speed = v end })
 LocalTab:CreateToggle({ Name = "Infinity Jump", CurrentValue = Settings.InfJump_Enabled, Flag = "InfJump", Callback = function(v) Settings.InfJump_Enabled = v end })
+
+local RageTab = Window:CreateTab("Rage Hack", "swords")
+RageTab:CreateToggle({ Name = "Bật Teleport Kill", CurrentValue = Settings.RageHack_Enabled, Flag = "RageHack_Enabled", Callback = function(v) Settings.RageHack_Enabled = v end })
+RageTab:CreateSlider({ Name = "Khoảng cách lùi về sau", Range = {1, 10}, Increment = 1, Suffix = "studs", CurrentValue = Settings.RageHack_Distance, Flag = "RageHack_Dist", Callback = function(v) Settings.RageHack_Distance = v end })
+RageTab:CreateSlider({ Name = "Độ cao bay lên", Range = {0, 15}, Increment = 1, Suffix = "studs", CurrentValue = Settings.RageHack_Height, Flag = "RageHack_Height", Callback = function(v) Settings.RageHack_Height = v end })
 
 Rayfield:LoadConfiguration()
 
@@ -134,6 +144,8 @@ local GameRegistry = {
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 
+local TargetMobileButton = nil
+
 if isMobile then
     local function InitializeMobileAimbot()
         local player = game.Players.LocalPlayer
@@ -145,6 +157,7 @@ if isMobile then
             if table.find(registryData.PlaceIds, game.PlaceId) then
                 print("[Log] Đã nhận diện game: " .. registryData.Name)
                 fireBtn = registryData.GetButton(playerGui)
+                TargetMobileButton = fireBtn
                 break
             end
         end
@@ -192,6 +205,7 @@ end
 
 local fovGui = Instance.new("ScreenGui")
 fovGui.Name = "FOVCircleGui"
+fovGui.IgnoreGuiInset = true
 local success, err = pcall(function()
     fovGui.Parent = game:GetService("CoreGui")
 end)
@@ -403,6 +417,70 @@ RunService.RenderStepped:Connect(function()
             local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
             if humanoid and humanoid.Health > 0 then
                 humanoid.WalkSpeed = Settings.SpeedHack_Speed
+            end
+        end
+    end
+end)
+
+local function FireWeapon()
+    if isMobile and TargetMobileButton then
+        for _, conn in ipairs(getconnections(TargetMobileButton.MouseButton1Click) or {}) do
+            conn:Fire()
+        end
+        for _, conn in ipairs(getconnections(TargetMobileButton.MouseButton1Down) or {}) do
+            conn:Fire()
+        end
+        for _, conn in ipairs(getconnections(TargetMobileButton.TouchTap) or {}) do
+            conn:Fire()
+        end
+    else
+        mouse1press()
+        task.wait()
+        mouse1release()
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.05)
+        
+        if Settings.RageHack_Enabled and LocalPlayer.Character then
+            local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local myHumanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+            
+            if myRoot and myHumanoid and myHumanoid.Health > 0 then
+                for _, v in ipairs(Players:GetPlayers()) do
+                    if v ~= LocalPlayer and v.Character then
+                        local enemyRoot = v.Character:FindFirstChild("HumanoidRootPart")
+                        local enemyHead = v.Character:FindFirstChild("Head")
+                        local enemyHumanoid = v.Character:FindFirstChild("Humanoid")
+                        
+                        if enemyRoot and enemyHead and enemyHumanoid and enemyHumanoid.Health > 0 then
+                            if Settings.Aimbot_TeamCheck and v.Team == LocalPlayer.Team then
+                                continue
+                            end
+                            
+                            Settings.RageHack_ActiveTarget = v
+                            
+                            while Settings.RageHack_Enabled and enemyHumanoid.Health > 0 and myHumanoid.Health > 0 do
+                                -- Dịch chuyển ra sau lưng (enemyRoot.CFrame.LookVector) và trên không (enemyHead.Position + Độ cao)
+                                local backwardOffset = -enemyRoot.CFrame.LookVector * Settings.RageHack_Distance
+                                local targetPosition = enemyHead.Position + Vector3.new(0, Settings.RageHack_Height, 0) + backwardOffset
+                                
+                                myRoot.CFrame = CFrame.new(targetPosition)
+                                
+                                -- Aim Camera từ trên xuống đầu địch (phong cách legacy V41)
+                                Camera.CFrame = CFrame.new(Camera.CFrame.Position, enemyHead.Position)
+                                
+                                FireWeapon()
+                                
+                                task.wait(0.05)
+                            end
+                            
+                            Settings.RageHack_ActiveTarget = nil
+                        end
+                    end
+                end
             end
         end
     end
