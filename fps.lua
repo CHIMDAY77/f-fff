@@ -93,24 +93,64 @@ local function isVisible(targetPart)
 end
 
 -- ===== AIM BOT THEO CODE MẪU =====
+local GameRegistry = {
+    {
+        Name = "CHAMBERED",
+        PlaceIds = {89772838187511},
+        GetButton = function(playerGui)
+            for _, ui in ipairs(playerGui:GetDescendants()) do
+                if ui.Name == "FireButton" and ui:IsA("TextButton") and ui.Parent and ui.Parent.Name == "MobileButtons" then
+                    return ui
+                end
+            end
+            return nil
+        end
+    },
+    {
+        Name = "Pistol-Arena",
+        PlaceIds = {87018676608089},
+        GetButton = function(playerGui)
+            for _, ui in ipairs(playerGui:GetDescendants()) do
+                if ui.Name == "ShootButton" and ui:IsA("TextButton") and ui.Parent and ui.Parent.Name == "Buttons" then
+                    return ui
+                end
+            end
+            return nil
+        end
+    },
+    {
+        Name = "OneTap",
+        PlaceIds = {90568084448279},
+        GetButton = function(playerGui)
+            for _, ui in ipairs(playerGui:GetDescendants()) do
+                if ui.Name == "Attack" and ui:IsA("ImageButton") and ui.Parent and ui.Parent.Name == "Buttons" then
+                    return ui
+                end
+            end
+            return nil
+        end
+    }
+}
+
 local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
 
 if isMobile then
-    local function HookMobileFireButton()
+    local function InitializeMobileAimbot()
         local player = game.Players.LocalPlayer
         local playerGui = player:WaitForChild("PlayerGui")
         local fireBtn = nil
 
-        -- Quét toàn bộ UI để tìm mục tiêu
-        for _, ui in pairs(playerGui:GetDescendants()) do
-            if ui.Name == "FireButton" and ui:IsA("TextButton") and ui.Parent and ui.Parent.Name == "MobileButtons" then
-                fireBtn = ui
+        -- Duyệt qua Registry để tìm game hiện tại
+        for _, registryData in ipairs(GameRegistry) do
+            if table.find(registryData.PlaceIds, game.PlaceId) then
+                print("[Log] Đã nhận diện game: " .. registryData.Name)
+                fireBtn = registryData.GetButton(playerGui)
                 break
             end
         end
 
         if fireBtn then
-            print("[Log] Đã bắt được FireButton chuẩn! Tiến hành hook aimbot...")
+            print("[Log] Đã tìm thấy nút bắn cho game hiện tại! Tiến hành hook aimbot...")
             fireBtn.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
                     Settings.Aiming = true
@@ -123,11 +163,11 @@ if isMobile then
                 end
             end)
         else
-            warn("[Lỗi] Không tìm thấy FireButton. Bạn kiểm tra lại xem UI mobile đã load chưa nhé!")
+            warn("[Lỗi] Game này không có nút bắn trong Registry hoặc UI mobile chưa load đầy đủ!")
         end
     end
 
-    task.spawn(HookMobileFireButton)
+    task.spawn(InitializeMobileAimbot)
 else
     local inputCount = 0
 
@@ -150,22 +190,41 @@ else
     end)
 end
 
-local fovCircle = Drawing.new("Circle")
-fovCircle.Visible = false
-fovCircle.Thickness = 1
-fovCircle.Color = Color3.fromRGB(255, 255, 255)
-fovCircle.Filled = false
-fovCircle.Transparency = 1
+local fovGui = Instance.new("ScreenGui")
+fovGui.Name = "FOVCircleGui"
+local success, err = pcall(function()
+    fovGui.Parent = game:GetService("CoreGui")
+end)
+if not success then
+    fovGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local fovFrame = Instance.new("Frame")
+fovFrame.Name = "FOVFrame"
+fovFrame.BackgroundTransparency = 1
+fovFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+fovFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+fovFrame.Visible = false
+fovFrame.Parent = fovGui
+
+local fovStroke = Instance.new("UIStroke")
+fovStroke.Color = Color3.fromRGB(255, 255, 255)
+fovStroke.Thickness = 1.5
+fovStroke.Parent = fovFrame
+
+local fovCorner = Instance.new("UICorner")
+fovCorner.CornerRadius = UDim.new(1, 0)
+fovCorner.Parent = fovFrame
 
 RunService.RenderStepped:Connect(function()
     -- Cập nhật hình vẽ FOV trên màn hình
     if Settings.FOV_Enabled then
-        fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-        fovCircle.Radius = Settings.AimBot_FOV
-        fovCircle.Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
-        fovCircle.Visible = true
+        local fovDiameter = Settings.AimBot_FOV * 2
+        fovFrame.Size = UDim2.new(0, fovDiameter, 0, fovDiameter)
+        fovStroke.Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+        fovFrame.Visible = true
     else
-        fovCircle.Visible = false
+        fovFrame.Visible = false
     end
 
     if not Settings.AimBot_Enabled then return end
